@@ -1,8 +1,6 @@
-// ✅ النسخة المصححة بالكامل من GameScreen.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:reown_appkit/base/appkit_base_impl.dart';
-import 'package:reown_appkit/modal/appkit_modal_impl.dart';
-import 'package:reown_appkit/modal/widgets/public/appkit_modal_connect_button.dart';
+import 'package:reown_appkit/reown_appkit.dart';
 import 'ShopScreen.dart';
 import 'UpgradeScreen.dart';
 
@@ -17,27 +15,78 @@ class GameScreen extends StatefulWidget {
   });
 
   @override
-  _GameScreenState createState() => _GameScreenState();
+  State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> {
+class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   int _score = 0;
-  int _tokenAmount = 0;
+  int _tokenAmount = 100;
   double _beeScale = 1.0;
   Color backgroundColor = Colors.white;
+
+  late AnimationController _animationController;
+  late Animation<double> _scaleAnimation;
+  String? _walletAddress;
+
+  @override
+  void initState() {
+    super.initState();
+    _initAnimations();
+    _setupWalletListener();
+    _loadWalletInfo();
+  }
+
+  void _initAnimations() {
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 150),
+      vsync: this,
+    );
+
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.85,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    ));
+  }
+
+  void _setupWalletListener() {
+    widget.appKitModal.onModalDisconnect.subscribe((ModalDisconnect? event) {
+      if (mounted && event != null) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    });
+  }
+
+  Future<void> _loadWalletInfo() async {
+    try {
+      final session = widget.appKitModal.session;
+      if (session != null) {
+        final address = session.getAddress(
+          ReownAppKitModalNetworks.getNamespaceForChainId(
+            widget.appKitModal.selectedChain?.chainId ?? 'eip155:1',
+          ),
+        );
+        if (mounted) {
+          setState(() {
+            _walletAddress = address;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading wallet info: $e');
+    }
+  }
 
   void _onTap() {
     setState(() {
       _score += 1;
-      _beeScale = 0.8;
+      _tokenAmount = (_score * 0.1).round();
     });
 
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (mounted) {
-        setState(() {
-          _beeScale = 1.0;
-        });
-      }
+    _animationController.forward().then((_) {
+      _animationController.reverse();
     });
   }
 
@@ -53,75 +102,176 @@ class _GameScreenState extends State<GameScreen> {
     }
   }
 
+  String _formatAddress(String? address) {
+    if (address == null || address.length < 10) return 'Not connected';
+    return '${address.substring(0, 6)}...${address.substring(address.length - 4)}';
+  }
+
+  Future<void> _transferTokens() async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Token transfer functionality will be implemented soon!'),
+        backgroundColor: Colors.blue,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.orangeAccent,
-        title: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
+        appBar: AppBar(
+          backgroundColor: Colors.orangeAccent,
+          elevation: 0,
+          title: Row(
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: Text(
-                  'Score: ${formatNumber(_score)}',
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                ),
-              ),
-              Row(
-                children: [
-                  const Icon(Icons.monetization_on, color: Colors.amber, size: 18),
-                  const SizedBox(width: 4),
-                  Text(
-                    formatNumber(_tokenAmount),
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20),
                   ),
-                ],
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: AppKitModalConnectButton(appKit: widget.appKitModal),
-              ),
-            ],
-          ),
-        ),
-      ),
-      backgroundColor: backgroundColor,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: Center(
-                child: GestureDetector(
-                  onTap: _onTap,
-                  child: AnimatedScale(
-                    scale: _beeScale,
-                    duration: const Duration(milliseconds: 100),
-                    child: Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        color: Colors.pink.shade100,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Center(
-                        child: Text("🐝", style: TextStyle(fontSize: 32)),
-                      ),
+                  child: Text(
+                    'Score: ${formatNumber(_score)}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.monetization_on, color: Colors.orange, size: 18),
+                    const SizedBox(width: 4),
+                    Text(
+                      formatNumber(_tokenAmount),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            Container(
+              margin: const EdgeInsets.only(right: 8),
+              child: AppKitModalConnectButton(appKit: widget.appKitModal),
             ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 24.0, top: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          ],
+        ),
+
+      backgroundColor: backgroundColor,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.95),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.06),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ElevatedButton.icon(
+                  const Text(
+                    'Wallet Address:',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _formatAddress(_walletAddress),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Center(
+                child: GestureDetector(
+                  onTap: _onTap,
+                  child: AnimatedBuilder(
+                    animation: _scaleAnimation,
+                    builder: (context, child) {
+                      return Transform.scale(
+                        scale: _scaleAnimation.value,
+                        child: Container(
+                          width: 150,
+                          height: 150,
+                          decoration: BoxDecoration(
+                            gradient: RadialGradient(
+                              colors: [
+                                Colors.yellow.shade200,
+                                Colors.orange.shade300,
+                              ],
+                            ),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.orange.withOpacity(0.4),
+                                blurRadius: 20,
+                                spreadRadius: 5,
+                              ),
+                            ],
+                          ),
+                          child: const Center(
+                            child: Text(
+                              "🐝",
+                              style: TextStyle(fontSize: 50),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              child: Row(
+                children: [
+                  _buildActionButton(
+                    icon: Icons.storefront,
+                    label: 'Shop',
                     onPressed: () async {
-                      await Navigator.push(
+                      final result = await Navigator.push<Color>(
                         context,
                         MaterialPageRoute(
                           builder: (context) => ShopScreen(
@@ -134,33 +284,62 @@ class _GameScreenState extends State<GameScreen> {
                           ),
                         ),
                       );
+                      if (result != null) {
+                        setState(() => backgroundColor = result);
+                      }
                     },
-                    icon: const Icon(Icons.storefront),
-                    label: const Text('Shop'),
                   ),
-                  ElevatedButton.icon(
+                  const SizedBox(width: 12),
+                  _buildActionButton(
+                    icon: Icons.upgrade,
+                    label: 'Upgrade',
                     onPressed: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => UpgradeScreen(tokenAmount: _tokenAmount),
+                          builder: (context) => UpgradeScreen(
+                            tokenAmount: _tokenAmount,
+                          ),
                         ),
                       );
                     },
-                    icon: const Icon(Icons.upgrade),
-                    label: const Text('Upgrade'),
                   ),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      // TODO: تحويل السكور إلى توكن
-                    },
-                    icon: const Icon(Icons.sync_alt),
-                    label: const Text('Transfer'),
+                  const SizedBox(width: 12),
+                  _buildActionButton(
+                    icon: Icons.sync_alt,
+                    label: 'Transfer',
+                    onPressed: _transferTokens,
                   ),
                 ],
               ),
-            )
+            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onPressed,
+  }) {
+    return Expanded(
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 20),
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.orange,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 4,
         ),
       ),
     );
