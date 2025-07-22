@@ -1,4 +1,4 @@
-name: flutterprojects
+name: ClickerBee
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -43,8 +43,11 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
-
+  flutter_launcher_icons: ^0.13.1
+flutter_launcher_icons:
+  image_path: "lib/assets/images/ChatGPT Image Jul 22, 2025, 11_53_56 AM.png"
+  android: true
+  ios: true
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -68,6 +71,7 @@ flutter:
   assets:
      - lib/assets/ABI/ClickerNft.json
      - lib/assets/images/
+     - lib/assets/images/ChatGPT Image Jul 22, 2025, 11_53_56 AM.png
 
 
   # An image asset can refer to one or more resolution-specific "variants", see

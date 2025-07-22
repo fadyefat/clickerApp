@@ -1,4 +1,3 @@
-// ... [All your existing imports]
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -26,11 +25,13 @@ class ShopScreen extends StatefulWidget {
 }
 
 class _ShopScreenState extends State<ShopScreen> {
-  final String nftContract = "0x03851Ad34BA72acC9d7564511a071c55a83F35aF";
+  final String nftContract = "0xf2aDc4ed82642F4cE376dcD50fE6aA58E09BE5Dd";
+  final String beeTokenContract = "0x4DB8baC8A86d4D227eED02ab5339dee7Fa666382";
 
   List<Map<String, dynamic>> nfts = [];
   bool isLoading = true;
   late DeployedContract deployedContract;
+  late DeployedContract beeTokenDeployedContract;
 
   @override
   void initState() {
@@ -52,49 +53,114 @@ class _ShopScreenState extends State<ShopScreen> {
         return;
       }
 
-      String abiString;
+      // Load NFT Contract ABI
+      String nftAbiString;
       try {
-        abiString = await rootBundle.loadString('lib/assets/ABI/ClickerNft.json');
+        nftAbiString = await rootBundle.loadString('lib/assets/ABI/ClickerNft.json');
       } catch (e) {
-        abiString = jsonEncode({
-          "abi": [
-            {
-              "inputs": [],
-              "name": "TOTAL_TYPES",
-              "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-              "stateMutability": "view",
-              "type": "function"
-            },
-            {
-              "inputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-              "name": "nftTypes",
-              "outputs": [
-                {"internalType": "string", "name": "uri", "type": "string"},
-                {"internalType": "uint256", "name": "price", "type": "uint256"},
-                {"components": [{"internalType": "uint256", "name": "_value", "type": "uint256"}], "internalType": "struct Counters.Counter", "name": "minted", "type": "tuple"}
-              ],
-              "stateMutability": "view",
-              "type": "function"
-            },
-            {
-              "inputs": [{"internalType": "uint256", "name": "typeId", "type": "uint256"}],
-              "name": "buyNFT",
-              "outputs": [],
-              "stateMutability": "nonpayable",
-              "type": "function"
-            }
-          ]
-        });
+        // Fallback ABI based on your provided ABI
+        nftAbiString = jsonEncode([
+          {
+            "inputs": [],
+            "name": "TOTAL_TYPES",
+            "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+            "stateMutability": "view",
+            "type": "function"
+          },
+          {
+            "inputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+            "name": "nftTypes",
+            "outputs": [
+              {"internalType": "string", "name": "uri", "type": "string"},
+              {"internalType": "uint256", "name": "price", "type": "uint256"},
+              {"components": [{"internalType": "uint256", "name": "_value", "type": "uint256"}], "internalType": "struct Counters.Counter", "name": "minted", "type": "tuple"}
+            ],
+            "stateMutability": "view",
+            "type": "function"
+          },
+          {
+            "inputs": [{"internalType": "uint256", "name": "typeId", "type": "uint256"}],
+            "name": "buyNFT",
+            "outputs": [],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          },
+          {
+            "inputs": [{"internalType": "uint256", "name": "typeId", "type": "uint256"}],
+            "name": "getNFTPrice",
+            "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+            "stateMutability": "view",
+            "type": "function"
+          }
+        ]);
       }
 
-      final abiJson = json.decode(abiString);
-      final abiCode = jsonEncode(abiJson['abi']);
+      // Load BEE Token ABI
+      String beeTokenAbiString;
+      try {
+        beeTokenAbiString = await rootBundle.loadString('lib/assets/ABI/BeeToken.json');
+      } catch (e) {
+        // Fallback ABI based on your provided ABI
+        beeTokenAbiString = jsonEncode([
+          {
+            "inputs": [
+              {"internalType": "address", "name": "spender", "type": "address"},
+              {"internalType": "uint256", "name": "amount", "type": "uint256"}
+            ],
+            "name": "approve",
+            "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+            "stateMutability": "nonpayable",
+            "type": "function"
+          },
+          {
+            "inputs": [
+              {"internalType": "address", "name": "owner", "type": "address"},
+              {"internalType": "address", "name": "spender", "type": "address"}
+            ],
+            "name": "allowance",
+            "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+            "stateMutability": "view",
+            "type": "function"
+          },
+          {
+            "inputs": [{"internalType": "address", "name": "account", "type": "address"}],
+            "name": "balanceOf",
+            "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+            "stateMutability": "view",
+            "type": "function"
+          }
+        ]);
+      }
 
+      // Parse ABIs
+      List<dynamic> nftAbiJson;
+      if (nftAbiString.startsWith('[')) {
+        nftAbiJson = json.decode(nftAbiString);
+      } else {
+        final abiData = json.decode(nftAbiString);
+        nftAbiJson = abiData is List ? abiData : abiData['abi'] ?? abiData;
+      }
+
+      List<dynamic> beeTokenAbiJson;
+      if (beeTokenAbiString.startsWith('[')) {
+        beeTokenAbiJson = json.decode(beeTokenAbiString);
+      } else {
+        final abiData = json.decode(beeTokenAbiString);
+        beeTokenAbiJson = abiData is List ? abiData : abiData['abi'] ?? abiData;
+      }
+
+      // Create deployed contracts
       deployedContract = DeployedContract(
-        ContractAbi.fromJson(abiCode, "ClickerNFT"),
+        ContractAbi.fromJson(jsonEncode(nftAbiJson), "ClickerNFT"),
         EthereumAddress.fromHex(nftContract),
       );
 
+      beeTokenDeployedContract = DeployedContract(
+        ContractAbi.fromJson(jsonEncode(beeTokenAbiJson), "BeeToken"),
+        EthereumAddress.fromHex(beeTokenContract),
+      );
+
+      // Get total NFT types
       final totalRes = await widget.appKitModal.requestReadContract(
         topic: widget.appKitModal.session!.topic,
         chainId: widget.appKitModal.selectedChain!.chainId,
@@ -129,13 +195,15 @@ class _ShopScreenState extends State<ShopScreen> {
 
           final uri = nftTypeRes[0]?.toString() ?? '';
           final rawPrice = nftTypeRes[1];
-          final priceInTokens = rawPrice is BigInt
-              ? rawPrice.toInt()
-              : rawPrice is int
-              ? rawPrice
-              : int.tryParse(rawPrice.toString()) ?? 0;
 
-          print('NFT $i - URI: $uri, Price: $priceInTokens');
+          // Convert price from wei to tokens (assuming 18 decimals)
+          BigInt priceInWei = rawPrice is BigInt
+              ? rawPrice
+              : BigInt.tryParse(rawPrice.toString()) ?? BigInt.zero;
+
+          double priceInTokens = priceInWei.toInt() / 1e18;
+
+          print('NFT $i - URI: $uri, Price: $priceInTokens BEE');
 
           if (uri.isEmpty) {
             loadedNFTs.add({
@@ -144,21 +212,23 @@ class _ShopScreenState extends State<ShopScreen> {
               'image': 'https://via.placeholder.com/300x300?text=NFT+$i',
               'typeId': i,
               'price': priceInTokens,
+              'priceInWei': priceInWei,
               'originalUri': uri,
               'attributes': [
                 {'trait_type': 'Type', 'value': i},
-                {'trait_type': 'Price', 'value': priceInTokens}
+                {'trait_type': 'Price', 'value': '$priceInTokens BEE'}
               ]
             });
             continue;
           }
 
-          final ipfsUri = uri.startsWith('ipfs://')
-              ? uri.replaceFirst("ipfs://", "https://ipfs.io/ipfs/")
-              : uri;
+          String imageUrl = uri;
+          if (uri.startsWith('ipfs://')) {
+            imageUrl = uri.replaceFirst("ipfs://", "https://ipfs.io/ipfs/");
+          }
 
           try {
-            final res = await http.get(Uri.parse(ipfsUri))
+            final res = await http.get(Uri.parse(imageUrl))
                 .timeout(const Duration(seconds: 10));
 
             if (res.statusCode == 200) {
@@ -169,19 +239,25 @@ class _ShopScreenState extends State<ShopScreen> {
                 attributes = jsonData['attributes'];
               }
 
+              String finalImageUrl = jsonData['image'] ?? imageUrl;
+              if (finalImageUrl.startsWith('ipfs://')) {
+                finalImageUrl = finalImageUrl.replaceFirst("ipfs://", "https://ipfs.io/ipfs/");
+              }
+
               loadedNFTs.add({
                 'name': jsonData['name'] ?? 'NFT Type $i',
                 'description': jsonData['description'] ?? 'NFT Type $i',
-                'image': jsonData['image'] ?? 'https://via.placeholder.com/300x300?text=NFT+$i',
+                'image': finalImageUrl,
                 'typeId': i,
                 'price': priceInTokens,
+                'priceInWei': priceInWei,
                 'originalUri': uri,
                 'attributes': attributes.isEmpty
                     ? [
                   {'trait_type': 'Type', 'value': i},
-                  {'trait_type': 'Price', 'value': priceInTokens}
+                  {'trait_type': 'Price', 'value': '$priceInTokens BEE'}
                 ]
-                    : [...attributes, {'trait_type': 'Price', 'value': priceInTokens}]
+                    : [...attributes, {'trait_type': 'Price', 'value': '$priceInTokens BEE'}]
               });
             } else {
               throw Exception('HTTP ${res.statusCode}');
@@ -191,13 +267,14 @@ class _ShopScreenState extends State<ShopScreen> {
             loadedNFTs.add({
               'name': 'NFT Type $i',
               'description': 'Metadata unavailable',
-              'image': 'https://via.placeholder.com/300x300?text=NFT+$i',
+              'image': imageUrl,
               'typeId': i,
               'price': priceInTokens,
+              'priceInWei': priceInWei,
               'originalUri': uri,
               'attributes': [
                 {'trait_type': 'Type', 'value': i},
-                {'trait_type': 'Price', 'value': priceInTokens}
+                {'trait_type': 'Price', 'value': '$priceInTokens BEE'}
               ]
             });
           }
@@ -209,6 +286,7 @@ class _ShopScreenState extends State<ShopScreen> {
             'image': 'https://via.placeholder.com/300x300?text=Error',
             'typeId': i,
             'price': 0,
+            'priceInWei': BigInt.zero,
             'attributes': [
               {'trait_type': 'Type', 'value': i},
               {'trait_type': 'Error', 'value': 'Failed to load'}
@@ -234,10 +312,24 @@ class _ShopScreenState extends State<ShopScreen> {
     }
   }
 
-  Future<void> _buyNFT(dynamic typeId) async {
+  Future<void> _buyNFT(Map<String, dynamic> nft) async {
     try {
-      final int parsedTypeId = typeId is int ? typeId : int.tryParse(typeId.toString()) ?? -1;
-      if (parsedTypeId < 0) throw Exception("Invalid typeId: $typeId");
+      final int typeId = nft['typeId'];
+      final BigInt priceInWei = nft['priceInWei'] ?? BigInt.zero;
+
+      if (priceInWei == BigInt.zero) {
+        throw Exception("Invalid NFT price");
+      }
+
+      final userAddress = widget.appKitModal.session!.getAddress(
+        ReownAppKitModalNetworks.getNamespaceForChainId(
+          widget.appKitModal.selectedChain!.chainId,
+        ),
+      );
+
+      if (userAddress == null) {
+        throw Exception("User address not found");
+      }
 
       showDialog(
         context: context,
@@ -253,43 +345,99 @@ class _ShopScreenState extends State<ShopScreen> {
         ),
       );
 
-      final txHash = await widget.appKitModal.requestWriteContract(
-        topic: widget.appKitModal.session!.topic,
-        chainId: widget.appKitModal.selectedChain!.chainId,
-        deployedContract: deployedContract,
-        functionName: 'buyNFT',
-        transaction: Transaction(
-          from: EthereumAddress.fromHex(
-            widget.appKitModal.session!.getAddress(
-              ReownAppKitModalNetworks.getNamespaceForChainId(
-                widget.appKitModal.selectedChain!.chainId,
-              ),
-            )!,
-          ),
-        ),
-        parameters: [BigInt.from(parsedTypeId)],
-      );
-
-      if (mounted) Navigator.pop(context);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ Successfully purchased NFT #$parsedTypeId!\nTx: ${txHash.toString().substring(0, 20)}...'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 3),
-          ),
+      // First, check if we need to approve the NFT contract to spend BEE tokens
+      try {
+        final allowanceRes = await widget.appKitModal.requestReadContract(
+          topic: widget.appKitModal.session!.topic,
+          chainId: widget.appKitModal.selectedChain!.chainId,
+          deployedContract: beeTokenDeployedContract,
+          functionName: 'allowance',
+          parameters: [
+            EthereumAddress.fromHex(userAddress),
+            EthereumAddress.fromHex(nftContract),
+          ],
         );
+
+        final currentAllowance = allowanceRes.isNotEmpty
+            ? (allowanceRes.first is BigInt ? allowanceRes.first : BigInt.tryParse(allowanceRes.first.toString()) ?? BigInt.zero)
+            : BigInt.zero;
+
+        print('Current allowance: $currentAllowance, Required: $priceInWei');
+
+        // If allowance is insufficient, approve first
+        if (currentAllowance < priceInWei) {
+          print('Approving BEE tokens for NFT contract...');
+
+          await widget.appKitModal.requestWriteContract(
+            topic: widget.appKitModal.session!.topic,
+            chainId: widget.appKitModal.selectedChain!.chainId,
+            deployedContract: beeTokenDeployedContract,
+            functionName: 'approve',
+            transaction: Transaction(
+              from: EthereumAddress.fromHex(userAddress),
+            ),
+            parameters: [
+              EthereumAddress.fromHex(nftContract),
+              priceInWei,
+            ],
+          );
+
+          print('BEE tokens approved successfully');
+        }
+
+        // Now buy the NFT
+        print('Buying NFT type $typeId...');
+
+        final txHash = await widget.appKitModal.requestWriteContract(
+          topic: widget.appKitModal.session!.topic,
+          chainId: widget.appKitModal.selectedChain!.chainId,
+          deployedContract: deployedContract,
+          functionName: 'buyNFT',
+          transaction: Transaction(
+            from: EthereumAddress.fromHex(userAddress),
+          ),
+          parameters: [BigInt.from(typeId)],
+        );
+
+        if (mounted) Navigator.pop(context);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Successfully purchased ${nft['name']}!\nTx: ${txHash.toString().substring(0, 20)}...'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+
+        // Refresh the NFT list
+        _loadAbiAndNFTs();
+
+      } catch (e) {
+        if (mounted) Navigator.pop(context);
+        throw e;
       }
     } catch (e) {
       if (mounted) Navigator.pop(context);
 
+      String errorMessage = 'Purchase failed: ${e.toString()}';
+
+      // Provide more user-friendly error messages
+      if (e.toString().contains('insufficient')) {
+        errorMessage = 'Insufficient BEE tokens to complete purchase';
+      } else if (e.toString().contains('rejected')) {
+        errorMessage = 'Transaction rejected by user';
+      } else if (e.toString().contains('allowance')) {
+        errorMessage = 'Token approval failed. Please try again.';
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ Purchase failed: ${e.toString()}'),
+            content: Text('❌ $errorMessage'),
             backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 4),
           ),
         );
       }
@@ -297,7 +445,7 @@ class _ShopScreenState extends State<ShopScreen> {
   }
 
   Widget _buildNFTCard(Map<String, dynamic> nft) {
-    final price = nft['price'] ?? 0;
+    final double price = nft['price'] ?? 0.0;
     final canAfford = widget.tokenAmount >= price;
 
     return Card(
@@ -313,17 +461,24 @@ class _ShopScreenState extends State<ShopScreen> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: Image.network(
-                  nft['image']?.toString().replaceFirst("ipfs://", "https://ipfs.io/ipfs/")
-                      ?? 'https://via.placeholder.com/300x300?text=No+Image',
+                  nft['image'] ?? 'https://via.placeholder.com/300x300?text=No+Image',
                   fit: BoxFit.cover,
                   loadingBuilder: (context, child, loadingProgress) {
                     if (loadingProgress == null) return child;
-                    return const Center(child: CircularProgressIndicator());
+                    return const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    );
                   },
                   errorBuilder: (context, error, stackTrace) =>
                       Container(
                         color: Colors.grey[200],
-                        child: const Icon(Icons.error, size: 50),
+                        child: const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.error_outline, size: 40, color: Colors.grey),
+                            Text('Image Error', style: TextStyle(color: Colors.grey)),
+                          ],
+                        ),
                       ),
                 ),
               ),
@@ -345,7 +500,7 @@ class _ShopScreenState extends State<ShopScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '$price BEE',
+                    '${price.toStringAsFixed(price < 1 ? 4 : 2)} BEE',
                     style: TextStyle(
                       color: canAfford ? Colors.green : Colors.red,
                       fontWeight: FontWeight.w600,
@@ -356,7 +511,7 @@ class _ShopScreenState extends State<ShopScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: canAfford ? () => _buyNFT(nft['typeId']) : null,
+                      onPressed: canAfford ? () => _buyNFT(nft) : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: canAfford ? Colors.orange : Colors.grey,
                         foregroundColor: Colors.white,
@@ -366,7 +521,7 @@ class _ShopScreenState extends State<ShopScreen> {
                         ),
                       ),
                       child: Text(
-                        canAfford ? 'Buy' : 'Insufficient BEE',
+                        canAfford ? 'Buy NFT' : 'Insufficient BEE',
                         style: const TextStyle(fontSize: 12),
                       ),
                     ),
@@ -429,6 +584,11 @@ class _ShopScreenState extends State<ShopScreen> {
               Text(
                 'No NFTs available',
                 style: TextStyle(fontSize: 18, color: Colors.grey),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Pull down to refresh',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
               ),
             ],
           ),

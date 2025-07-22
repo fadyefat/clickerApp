@@ -20,7 +20,7 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   int _score = 0;
-  int _tokenAmount = 100;
+  int _tokenAmount = 0;
   double _beeScale = 1.0;
   Color backgroundColor = Colors.white;
 
@@ -125,61 +125,77 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: AppBar(
-          backgroundColor: Colors.orangeAccent,
-          elevation: 0,
-          title: Row(
-            children: [
-              Flexible(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(20),
+      appBar: AppBar(
+        backgroundColor: Colors.orangeAccent,
+        elevation: 0,
+        toolbarHeight: 60,
+        titleSpacing: 8,
+        title: Row(
+          children: [
+            // Score container - flexible and constrained
+            Flexible(
+              flex: 2,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(
+                  'Score: ${formatNumber(_score)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
-                  child: Text(
-                    'Score: ${formatNumber(_score)}',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            ),
+            const SizedBox(width: 6),
+            // Token container - flexible and constrained
+            Flexible(
+              flex: 2,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: Colors.amber.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.monetization_on, color: Colors.orange, size: 18),
-                    const SizedBox(width: 4),
-                    Text(
-                      formatNumber(_tokenAmount),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.orange,
+                    const Icon(Icons.monetization_on, color: Colors.orange, size: 16),
+                    const SizedBox(width: 2),
+                    Flexible(
+                      child: Text(
+                        formatNumber(_tokenAmount),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
-          actions: [
-            Container(
-              margin: const EdgeInsets.only(right: 8),
-              child: AppKitModalConnectButton(appKit: widget.appKitModal),
             ),
           ],
         ),
-
+        actions: [
+          // Wallet button with fixed width to prevent overflow
+          Container(
+            width: 100,
+            height: 32, // تصغير الارتفاع
+            margin: const EdgeInsets.only(right: 8),
+            child: FittedBox( // لتصغير حجم الزر والمحتوى تلقائيًا
+              child: AppKitModalConnectButton(appKit: widget.appKitModal),
+            ),
+          ),
+        ],
+      ),
       backgroundColor: backgroundColor,
       body: SafeArea(
         child: Column(
@@ -250,10 +266,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                               ),
                             ],
                           ),
-                          child: const Center(
-                            child: Text(
-                              "🐝",
-                              style: TextStyle(fontSize: 50),
+                          child: Center(
+                            child:  Image.asset(
+                              'ChatGPT Image Jul 22, 2025, 11_53_56 AM.png',
+                              height: 30,
                             ),
                           ),
                         ),
