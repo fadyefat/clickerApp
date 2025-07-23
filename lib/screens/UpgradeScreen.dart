@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class UpgradeScreen extends StatefulWidget {
   final int tokenAmount;
@@ -68,6 +69,44 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
   void initState() {
     super.initState();
     _currentScore = widget.currentScore;
+    _loadAbilities(); // Load saved abilities when screen initializes
+  }
+
+  // Load abilities from SharedPreferences
+  Future<void> _loadAbilities() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      setState(() {
+        _ownedAbilities['double_tap'] = prefs.getInt('ability_double_tap') ?? 0;
+        _ownedAbilities['power_click'] = prefs.getInt('ability_power_click') ?? 0;
+        _ownedAbilities['mega_boost'] = prefs.getInt('ability_mega_boost') ?? 0;
+        _ownedAbilities['auto_clicker'] = prefs.getInt('ability_auto_clicker') ?? 0;
+      });
+
+      print('Abilities loaded in UpgradeScreen: $_ownedAbilities');
+    } catch (e) {
+      print('Error loading abilities in UpgradeScreen: $e');
+    }
+  }
+
+  // Save abilities to SharedPreferences
+  Future<void> _saveAbilities() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      await prefs.setInt('ability_double_tap', _ownedAbilities['double_tap'] ?? 0);
+      await prefs.setInt('ability_power_click', _ownedAbilities['power_click'] ?? 0);
+      await prefs.setInt('ability_mega_boost', _ownedAbilities['mega_boost'] ?? 0);
+      await prefs.setInt('ability_auto_clicker', _ownedAbilities['auto_clicker'] ?? 0);
+
+      // Also save the current score
+      await prefs.setInt('game_score', _currentScore);
+
+      print('Abilities and score saved from UpgradeScreen');
+    } catch (e) {
+      print('Error saving abilities from UpgradeScreen: $e');
+    }
   }
 
   int _getAbilityPrice(Map<String, dynamic> ability) {
@@ -107,6 +146,9 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
       _currentScore -= price;
       _ownedAbilities[abilityId] = currentLevel + 1;
     });
+
+    // Save the updated data immediately after purchase
+    _saveAbilities();
 
     // Notify parent widget about the purchase
     if (widget.onPurchase != null) {
