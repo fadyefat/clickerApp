@@ -30,6 +30,7 @@ class _ShopScreenState extends State<ShopScreen> {
 
   List<Map<String, dynamic>> nfts = [];
   bool isLoading = true;
+  String? errorMessage;
   late DeployedContract deployedContract;
   late DeployedContract beeTokenDeployedContract;
 
@@ -39,17 +40,34 @@ class _ShopScreenState extends State<ShopScreen> {
     _loadAbiAndNFTs();
   }
 
+  // Fixed price conversion function
+  double _convertWeiToTokens(BigInt weiAmount) {
+    if (weiAmount == BigInt.zero) return 0.0;
+
+    // Convert BigInt to double more accurately
+    // For 18 decimals: divide by 10^18
+    final divisor = BigInt.from(10).pow(18);
+    final wholePart = weiAmount ~/ divisor;
+    final fractionalPart = weiAmount % divisor;
+
+    // Convert fractional part to double
+    final fractionalAsDouble = fractionalPart.toDouble() / divisor.toDouble();
+
+    return wholePart.toDouble() + fractionalAsDouble;
+  }
+
   Future<void> _loadAbiAndNFTs() async {
     try {
-      setState(() => isLoading = true);
+      setState(() {
+        isLoading = true;
+        errorMessage = null;
+      });
 
       if (widget.appKitModal.session == null) {
-        setState(() => isLoading = false);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('❌ Please connect your wallet first')),
-          );
-        }
+        setState(() {
+          isLoading = false;
+          errorMessage = 'Please connect your wallet first';
+        });
         return;
       }
 
@@ -58,7 +76,7 @@ class _ShopScreenState extends State<ShopScreen> {
       try {
         nftAbiString = await rootBundle.loadString('lib/assets/ABI/ClickerNft.json');
       } catch (e) {
-        // Fallback ABI based on your provided ABI
+        print('Failed to load NFT ABI from file, using fallback: $e');
         nftAbiString = jsonEncode([
           {
             "inputs": [],
@@ -100,7 +118,7 @@ class _ShopScreenState extends State<ShopScreen> {
       try {
         beeTokenAbiString = await rootBundle.loadString('lib/assets/ABI/BeeToken.json');
       } catch (e) {
-        // Fallback ABI based on your provided ABI
+        print('Failed to load BEE Token ABI from file, using fallback: $e');
         beeTokenAbiString = jsonEncode([
           {
             "inputs": [
@@ -134,19 +152,27 @@ class _ShopScreenState extends State<ShopScreen> {
 
       // Parse ABIs
       List<dynamic> nftAbiJson;
-      if (nftAbiString.startsWith('[')) {
-        nftAbiJson = json.decode(nftAbiString);
-      } else {
-        final abiData = json.decode(nftAbiString);
-        nftAbiJson = abiData is List ? abiData : abiData['abi'] ?? abiData;
+      try {
+        if (nftAbiString.startsWith('[')) {
+          nftAbiJson = json.decode(nftAbiString);
+        } else {
+          final abiData = json.decode(nftAbiString);
+          nftAbiJson = abiData is List ? abiData : abiData['abi'] ?? abiData;
+        }
+      } catch (e) {
+        throw Exception('Failed to parse NFT ABI: $e');
       }
 
       List<dynamic> beeTokenAbiJson;
-      if (beeTokenAbiString.startsWith('[')) {
-        beeTokenAbiJson = json.decode(beeTokenAbiString);
-      } else {
-        final abiData = json.decode(beeTokenAbiString);
-        beeTokenAbiJson = abiData is List ? abiData : abiData['abi'] ?? abiData;
+      try {
+        if (beeTokenAbiString.startsWith('[')) {
+          beeTokenAbiJson = json.decode(beeTokenAbiString);
+        } else {
+          final abiData = json.decode(beeTokenAbiString);
+          beeTokenAbiJson = abiData is List ? abiData : abiData['abi'] ?? abiData;
+        }
+      } catch (e) {
+        throw Exception('Failed to parse BEE Token ABI: $e');
       }
 
       // Create deployed contracts
@@ -168,10 +194,34 @@ class _ShopScreenState extends State<ShopScreen> {
         functionName: 'TOTAL_TYPES',
       );
 
-      final rawTotal = totalRes.isNotEmpty ? totalRes.first : BigInt.zero;
-      final total = rawTotal is BigInt ? rawTotal.toInt() : int.tryParse(rawTotal.toString()) ?? 0;
+      if (totalRes.isEmpty) {
+        throw Exception('Failed to get TOTAL_TYPES from contract');
+      }
+
+      final rawTotal = totalRes.first;
+      int total;
+
+      if (rawTotal is BigInt) {
+        total = rawTotal.toInt();
+      } else if (rawTotal is int) {
+        total = rawTotal;
+      } else {
+        final parsed = int.tryParse(rawTotal.toString());
+        if (parsed == null) {
+          throw Exception('Invalid TOTAL_TYPES value: $rawTotal');
+        }
+        total = parsed;
+      }
 
       print('Total NFT types: $total');
+
+      if (total <= 0) {
+        setState(() {
+          nfts = [];
+          isLoading = false;
+        });
+        return;
+      }
 
       List<Map<String, dynamic>> loadedNFTs = [];
 
@@ -187,127 +237,141 @@ class _ShopScreenState extends State<ShopScreen> {
             parameters: [BigInt.from(i)],
           );
 
-          print('NFT Type $i response: $nftTypeRes');
+          print('NFT Type $i response length: ${nftTypeRes.length}');
 
-          if (nftTypeRes.isEmpty || nftTypeRes.length < 2) {
-            throw Exception('Invalid nftTypes response');
+          if (nftTypeRes.isEmpty) {
+            throw Exception('Empty nftTypes response for type $i');
           }
 
-          final uri = nftTypeRes[0]?.toString() ?? '';
-          final rawPrice = nftTypeRes[1];
+          String uri = '';
+          BigInt priceInWei = BigInt.zero;
 
-          // Convert price from wei to tokens (assuming 18 decimals)
-          BigInt priceInWei = rawPrice is BigInt
-              ? rawPrice
-              : BigInt.tryParse(rawPrice.toString()) ?? BigInt.zero;
-
-          double priceInTokens = priceInWei.toInt() / 1e18;
-
-          print('NFT $i - URI: $uri, Price: $priceInTokens BEE');
-
-          if (uri.isEmpty) {
-            loadedNFTs.add({
-              'name': 'NFT Type $i',
-              'description': 'NFT Type $i',
-              'image': 'https://via.placeholder.com/300x300?text=NFT+$i',
-              'typeId': i,
-              'price': priceInTokens,
-              'priceInWei': priceInWei,
-              'originalUri': uri,
-              'attributes': [
-                {'trait_type': 'Type', 'value': i},
-                {'trait_type': 'Price', 'value': '$priceInTokens BEE'}
-              ]
-            });
-            continue;
+          // Extract URI
+          if (nftTypeRes.isNotEmpty && nftTypeRes[0] != null) {
+            uri = nftTypeRes[0].toString();
           }
 
-          String imageUrl = uri;
-          if (uri.startsWith('ipfs://')) {
-            imageUrl = uri.replaceFirst("ipfs://", "https://ipfs.io/ipfs/");
-          }
-
-          try {
-            final res = await http.get(Uri.parse(imageUrl))
-                .timeout(const Duration(seconds: 10));
-
-            if (res.statusCode == 200) {
-              final jsonData = json.decode(res.body);
-
-              List<dynamic> attributes = [];
-              if (jsonData['attributes'] is List) {
-                attributes = jsonData['attributes'];
+          // Extract price with improved parsing
+          if (nftTypeRes.length > 1 && nftTypeRes[1] != null) {
+            final rawPrice = nftTypeRes[1];
+            try {
+              if (rawPrice is BigInt) {
+                priceInWei = rawPrice;
+              } else if (rawPrice is int) {
+                priceInWei = BigInt.from(rawPrice);
+              } else if (rawPrice is String) {
+                if (rawPrice.startsWith('0x')) {
+                  priceInWei = BigInt.parse(rawPrice.substring(2), radix: 16);
+                } else {
+                  priceInWei = BigInt.tryParse(rawPrice) ?? BigInt.zero;
+                }
+              } else {
+                final priceStr = rawPrice.toString();
+                if (priceStr.startsWith('0x')) {
+                  priceInWei = BigInt.parse(priceStr.substring(2), radix: 16);
+                } else {
+                  priceInWei = BigInt.tryParse(priceStr) ?? BigInt.zero;
+                }
               }
-
-              String finalImageUrl = jsonData['image'] ?? imageUrl;
-              if (finalImageUrl.startsWith('ipfs://')) {
-                finalImageUrl = finalImageUrl.replaceFirst("ipfs://", "https://ipfs.io/ipfs/");
-              }
-
-              loadedNFTs.add({
-                'name': jsonData['name'] ?? 'NFT Type $i',
-                'description': jsonData['description'] ?? 'NFT Type $i',
-                'image': finalImageUrl,
-                'typeId': i,
-                'price': priceInTokens,
-                'priceInWei': priceInWei,
-                'originalUri': uri,
-                'attributes': attributes.isEmpty
-                    ? [
-                  {'trait_type': 'Type', 'value': i},
-                  {'trait_type': 'Price', 'value': '$priceInTokens BEE'}
-                ]
-                    : [...attributes, {'trait_type': 'Price', 'value': '$priceInTokens BEE'}]
-              });
-            } else {
-              throw Exception('HTTP ${res.statusCode}');
+            } catch (e) {
+              print('Error parsing price for NFT $i: $e, rawPrice: $rawPrice');
+              priceInWei = BigInt.zero;
             }
-          } catch (e) {
-            print('Failed to fetch metadata for NFT $i: $e');
-            loadedNFTs.add({
-              'name': 'NFT Type $i',
-              'description': 'Metadata unavailable',
-              'image': imageUrl,
-              'typeId': i,
-              'price': priceInTokens,
-              'priceInWei': priceInWei,
-              'originalUri': uri,
-              'attributes': [
-                {'trait_type': 'Type', 'value': i},
-                {'trait_type': 'Price', 'value': '$priceInTokens BEE'}
-              ]
-            });
           }
-        } catch (e) {
-          print('Error loading NFT type $i: $e');
-          loadedNFTs.add({
+
+          // Convert price using fixed function
+          double priceInTokens = _convertWeiToTokens(priceInWei);
+
+          print('NFT $i - URI: $uri, Price: $priceInTokens BEE (${priceInWei} wei)');
+
+          // Handle metadata fetching
+          Map<String, dynamic> nftData = {
             'name': 'NFT Type $i',
-            'description': 'Failed to load',
-            'image': 'https://via.placeholder.com/300x300?text=Error',
+            'description': 'NFT Type $i',
+            'image': 'https://via.placeholder.com/300x300?text=NFT+$i',
             'typeId': i,
-            'price': 0,
-            'priceInWei': BigInt.zero,
+            'price': priceInTokens,
+            'priceInWei': priceInWei,
+            'originalUri': uri,
             'attributes': [
               {'trait_type': 'Type', 'value': i},
-              {'trait_type': 'Error', 'value': 'Failed to load'}
+              {'trait_type': 'Price', 'value': '${priceInTokens.toStringAsFixed(4)} BEE'}
+            ]
+          };
+
+          if (uri.isNotEmpty) {
+            String imageUrl = uri;
+            if (uri.startsWith('ipfs://')) {
+              imageUrl = uri.replaceFirst("ipfs://", "https://ipfs.io/ipfs/");
+            } else if (uri.startsWith('Qm') && uri.length == 46) {
+              imageUrl = "https://ipfs.io/ipfs/$uri";
+            }
+
+            try {
+              final res = await http.get(
+                Uri.parse(imageUrl),
+                headers: {'Accept': 'application/json'},
+              ).timeout(const Duration(seconds: 10));
+
+              if (res.statusCode == 200) {
+                try {
+                  final jsonData = json.decode(res.body);
+
+                  String finalImageUrl = jsonData['image'] ?? imageUrl;
+                  if (finalImageUrl.startsWith('ipfs://')) {
+                    finalImageUrl = finalImageUrl.replaceFirst("ipfs://", "https://ipfs.io/ipfs/");
+                  } else if (finalImageUrl.startsWith('Qm') && finalImageUrl.length == 46) {
+                    finalImageUrl = "https://ipfs.io/ipfs/$finalImageUrl";
+                  }
+
+                  nftData.addAll({
+                    'name': jsonData['name'] ?? 'NFT Type $i',
+                    'description': jsonData['description'] ?? 'NFT Type $i',
+                    'image': finalImageUrl,
+                    'attributes': (jsonData['attributes'] as List?)?.cast<Map<String, dynamic>>() ?? nftData['attributes'],
+                  });
+                } catch (e) {
+                  print('Failed to parse JSON for NFT $i: $e');
+                }
+              }
+            } catch (e) {
+              print('Failed to fetch metadata for NFT $i: $e');
+            }
+          }
+
+          loadedNFTs.add(nftData);
+        } catch (e) {
+          print('Error loading NFT type $i: $e');
+          // Add placeholder for failed NFTs
+          loadedNFTs.add({
+            'name': 'NFT Type $i',
+            'description': 'Failed to load data',
+            'image': 'https://via.placeholder.com/300x300?text=Error+Loading+NFT+$i',
+            'typeId': i,
+            'price': 0.0,
+            'priceInWei': BigInt.zero,
+            'originalUri': '',
+            'attributes': [
+              {'trait_type': 'Type', 'value': i},
+              {'trait_type': 'Status', 'value': 'Load Error'}
             ]
           });
         }
       }
 
-      print('Loaded ${loadedNFTs.length} NFTs');
-
-      setState(() {
-        nfts = loadedNFTs;
-        isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          nfts = loadedNFTs;
+          isLoading = false;
+        });
+      }
     } catch (e) {
       print('Error in _loadAbiAndNFTs: $e');
-      setState(() => isLoading = false);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Failed to load NFTs: ${e.toString()}')),
-        );
+        setState(() {
+          isLoading = false;
+          errorMessage = 'Failed to load NFTs: ${e.toString()}';
+        });
       }
     }
   }
@@ -331,6 +395,8 @@ class _ShopScreenState extends State<ShopScreen> {
         throw Exception("User address not found");
       }
 
+      if (!mounted) return;
+
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -345,8 +411,8 @@ class _ShopScreenState extends State<ShopScreen> {
         ),
       );
 
-      // First, check if we need to approve the NFT contract to spend BEE tokens
       try {
+        // Check allowance
         final allowanceRes = await widget.appKitModal.requestReadContract(
           topic: widget.appKitModal.session!.topic,
           chainId: widget.appKitModal.selectedChain!.chainId,
@@ -362,12 +428,8 @@ class _ShopScreenState extends State<ShopScreen> {
             ? (allowanceRes.first is BigInt ? allowanceRes.first : BigInt.tryParse(allowanceRes.first.toString()) ?? BigInt.zero)
             : BigInt.zero;
 
-        print('Current allowance: $currentAllowance, Required: $priceInWei');
-
-        // If allowance is insufficient, approve first
+        // Approve if needed
         if (currentAllowance < priceInWei) {
-          print('Approving BEE tokens for NFT contract...');
-
           await widget.appKitModal.requestWriteContract(
             topic: widget.appKitModal.session!.topic,
             chainId: widget.appKitModal.selectedChain!.chainId,
@@ -381,13 +443,9 @@ class _ShopScreenState extends State<ShopScreen> {
               priceInWei,
             ],
           );
-
-          print('BEE tokens approved successfully');
         }
 
-        // Now buy the NFT
-        print('Buying NFT type $typeId...');
-
+        // Buy NFT
         final txHash = await widget.appKitModal.requestWriteContract(
           topic: widget.appKitModal.session!.topic,
           chainId: widget.appKitModal.selectedChain!.chainId,
@@ -411,9 +469,7 @@ class _ShopScreenState extends State<ShopScreen> {
           );
         }
 
-        // Refresh the NFT list
         _loadAbiAndNFTs();
-
       } catch (e) {
         if (mounted) Navigator.pop(context);
         throw e;
@@ -422,14 +478,10 @@ class _ShopScreenState extends State<ShopScreen> {
       if (mounted) Navigator.pop(context);
 
       String errorMessage = 'Purchase failed: ${e.toString()}';
-
-      // Provide more user-friendly error messages
       if (e.toString().contains('insufficient')) {
         errorMessage = 'Insufficient BEE tokens to complete purchase';
       } else if (e.toString().contains('rejected')) {
         errorMessage = 'Transaction rejected by user';
-      } else if (e.toString().contains('allowance')) {
-        errorMessage = 'Token approval failed. Please try again.';
       }
 
       if (mounted) {
@@ -450,87 +502,107 @@ class _ShopScreenState extends State<ShopScreen> {
 
     return Card(
       elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              flex: 3,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  nft['image'] ?? 'https://via.placeholder.com/300x300?text=No+Image',
-                  fit: BoxFit.cover,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return const Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) =>
-                      Container(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Calculate available height and distribute space
+          final availableHeight = constraints.maxHeight;
+          final imageHeight = availableHeight * 0.6; // 60% for image
+          final contentHeight = availableHeight * 0.4; // 40% for content
+
+          return Padding(
+            padding: const EdgeInsets.all(6.0), // Reduced padding
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Image section with calculated height
+                SizedBox(
+                  height: imageHeight,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(
+                      nft['image'] ?? 'https://via.placeholder.com/300x300?text=No+Image',
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const Center(
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) => Container(
                         color: Colors.grey[200],
                         child: const Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.error_outline, size: 40, color: Colors.grey),
-                            Text('Image Error', style: TextStyle(color: Colors.grey)),
+                            Icon(Icons.error_outline, size: 10, color: Colors.grey),
+
+                            Text('Image Error', style: TextStyle(color: Colors.grey, fontSize: 8)),
                           ],
                         ),
                       ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              flex: 2,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    nft['name'] ?? 'NFT #${nft['typeId']}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${price.toStringAsFixed(price < 1 ? 4 : 2)} BEE',
-                    style: TextStyle(
-                      color: canAfford ? Colors.green : Colors.red,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const Spacer(),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: canAfford ? () => _buyNFT(nft) : null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: canAfford ? Colors.orange : Colors.grey,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                // Content section with calculated height
+                Padding(
+                  padding: const EdgeInsets.only(top: 2.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Text content - flexible to take available space
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            nft['name'] ?? 'NFT #${nft['typeId']}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${price.toStringAsFixed(price < 1 ? 4 : 2)} BEE',
+                            style: TextStyle(
+                              color: canAfford ? Colors.green : Colors.red,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ],
+                      ),
+                      // Button - fixed at bottom
+                      SizedBox(
+                        width: double.infinity,
+                        height: 25, // Reduced button height
+                        child: ElevatedButton(
+                          onPressed: canAfford ? () => _buyNFT(nft) : null,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: canAfford ? Colors.orange : Colors.grey,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 1),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+
+                          ),
+                          child: Text(
+                            canAfford ? 'Buy NFT' : 'Low BEE',
+                            style: const TextStyle(fontSize: 9),
+                          ),
                         ),
                       ),
-                      child: Text(
-                        canAfford ? 'Buy NFT' : 'Insufficient BEE',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -574,6 +646,26 @@ class _ShopScreenState extends State<ShopScreen> {
             ],
           ),
         )
+            : errorMessage != null
+            ? Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const SizedBox(height: 16),
+              Text(
+                errorMessage!,
+                style: const TextStyle(fontSize: 16, color: Colors.red),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _loadAbiAndNFTs,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        )
             : nfts.isEmpty
             ? const Center(
           child: Column(
@@ -599,7 +691,7 @@ class _ShopScreenState extends State<ShopScreen> {
             crossAxisCount: 2,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            childAspectRatio: 0.7,
+            childAspectRatio: 0.8, // Adjusted for better proportions
           ),
           itemCount: nfts.length,
           itemBuilder: (context, index) => _buildNFTCard(nfts[index]),
