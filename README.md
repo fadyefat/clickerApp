@@ -1,62 +1,70 @@
 # 🐝 Clicker Bee – Blockchain Clicker Game
 
-![Clicker Bee](https://img.shields.io/badge/status-in%20development-yellow)  
-🎮 **Clicker Bee** is a blockchain-powered clicker game where every tap earns you rewards — and soon, tokens!
+[![Download APK](https://img.shields.io/badge/⬇️_Download_v0.0.1-blue?style=for-the-badge)](https://github.com/fadyefat/clickerApp/releases/download/v0.0.1/app-release.apk)
+
+🎮 **Clicker Bee** is a blockchain-based tap game where each click earns you points — and soon, real crypto rewards!
+
+> 🚧 This project is currently in its **experimental phase**. The game mechanics and smart contract integrations are under active development.
 
 ---
 
-## 📱 Download APK
+## 🧪 What is This Project?
 
-👉 [Download the latest APK](https://github.com/fadyefat/clickerApp/releases/latest/download/app-release.apk)
+**Clicker Bee** is a prototype mobile game built with Flutter and integrated with Web3 smart contracts. It combines:
 
----
+- Classic **clicker gameplay**
+- NFT-based **bug upgrades**
+- ERC-20 token rewards (BEE Token)
+- MetaMask wallet connection
 
-## 🚧 Project Status
-
-This project is still in **experimental and testing** phase.  
-The current version is a basic prototype to demonstrate the core clicker mechanics.
-
-Upcoming features will include:
-
-- 🪙 Integration with a custom **cryptocurrency (BEE Token)**  
-- 🧠 Smart Contract-based **score conversion and NFT system**
-- 🔁 Automatic on-chain **score-to-token and token-to-NFT conversions**
-- 🐞 Multiple NFT bug characters that enhance tap power
+This version is an early test to demonstrate the game loop, NFT integration design, and Web3 backend readiness.
 
 ---
 
-## 🎮 Current Features
+## 🔮 Planned Features
 
-- Basic clicker logic with score counter
-- Upgrade screen for future NFT logic
-- Shop screen (will display NFTs for purchase with BEE Token)
-- Wallet connection via MetaMask (in progress)
-- Integration-ready with deployed smart contracts on Sepolia testnet
-
----
-
-## 🔐 Blockchain Integration (Planned)
-
-The game is being built with full Web3 capabilities, including:
-
-- 🔗 Smart contracts for:
-  - Score tracking
-  - Token minting
-  - NFT purchasing
-- 🧾 Contracts deployed on **Sepolia testnet**
-- 🎒 Wallet login via MetaMask (Reown AppKit)
+- 🪙 **Custom BEE Token** as in-game currency
+- 📲 Fully automated conversions:
+  - Score ➝ Token
+  - Token ➝ NFT
+- 🐞 10 types of NFT bug characters, each with a unique score boost
+- 🛒 In-game NFT shop powered by blockchain
+- 🔐 Wallet-based login and ownership (via MetaMask using Reown AppKit)
+- 📤 On-chain score tracking and exchange
+- 🌐 All transactions handled via deployed **smart contracts**
 
 ---
 
-## 🧪 Notes
+## 🔧 Tech Stack
 
-This APK is for testing only and **not ready for production**.  
-Expect major updates soon with token functionality and real on-chain asset handling.
+- **Frontend:** Flutter
+- **Blockchain:** Solidity + Sepolia testnet
+- **Wallet Integration:** Reown AppKit
+- **Token/NFT Standards:** ERC-20 + ERC-721
+- **Backend:** Pure on-chain logic (no centralized server)
 
 ---
 
-## 📧 Contact
+## 📱 Download & Test
 
-If you'd like to collaborate or give feedback:  
-🔗 [GitHub Profile](https://github.com/fadyefat)
+Click the button below to download the current test APK:
+
+[![Download APK](https://img.shields.io/badge/⬇️_Download_v0.0.1-blue?style=for-the-badge)](https://github.com/fadyefat/clickerApp/releases/download/v0.0.1/app-release.apk)
+
+---
+
+## ⚠️ Notes
+
+> This is not a production-ready app.  
+> It's a **functional test build** showcasing the future direction of the project.  
+> Contracts are live on **Sepolia testnet** and integration is ongoing.
+
+---
+
+## 🤝 Contact & Feedback
+
+Feel free to reach out or suggest contributions:  
+🔗 [@fadyefat on GitHub](https://github.com/fadyefat)
+
+---
 
