@@ -2,7 +2,7 @@
 
 [![Download APK](https://img.shields.io/badge/⬇️_Download_v0.0.1-blue?style=for-the-badge)](https://github.com/fadyefat/clickerApp/releases/download/v0.0.1/app-release.apk)
 
-🎮 **Clicker Bee** is a blockchain-based tap game where each click earns you points — and soon, real crypto rewards!
+🎮 **Clicker Bee** is a blockchain-based tap game where each click earns you points !
 
 > 🚧 This project is currently in its **experimental phase**. The game mechanics and smart contract integrations are under active development.
 
